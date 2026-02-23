@@ -29,6 +29,7 @@ local LOADING_DURATION   = 5    -- seconds the fake loading screen is shown
 
 local smoothness    = 1 - (0.15 * SMOOTHNESS_SCALE) -- matches slider default 0.15 in inverted formula
 local lockedTarget  = nil        -- the BasePart we are locked onto
+local visibleOnly   = false
 
 local espEnabled    = false
 local chamsEnabled  = false
@@ -51,13 +52,13 @@ local guiParent = (rawget(_G, "gethui") and gethui()) or game:GetService("CoreGu
 ScreenGui.Parent          = guiParent
 
 -- ── Theme colours ──
-local COL_BG       = Color3.fromRGB(15,  15,  15)
-local COL_PANEL    = Color3.fromRGB(30,  30,  30)
-local COL_ACCENT   = Color3.fromRGB(255, 255, 255)
-local COL_DIM      = Color3.fromRGB(160, 160, 160)
-local COL_TOGON    = Color3.fromRGB(255, 255, 255)
-local COL_TOGOFF   = Color3.fromRGB(60,  60,  60)
-local COL_SLIDER   = Color3.fromRGB(255, 255, 255)
+local COL_BG       = Color3.fromRGB(6,   6,   8)
+local COL_PANEL    = Color3.fromRGB(16,  16,  20)
+local COL_ACCENT   = Color3.fromRGB(220, 40,  40)
+local COL_DIM      = Color3.fromRGB(180, 170, 170)
+local COL_TOGON    = Color3.fromRGB(200, 30,  30)
+local COL_TOGOFF   = Color3.fromRGB(45,  45,  50)
+local COL_SLIDER   = Color3.fromRGB(220, 40,  40)
 
 -- ── Main Window ──
 local MainFrame = Instance.new("Frame")
@@ -113,7 +114,7 @@ CloseBtn.BackgroundColor3  = Color3.fromRGB(200, 50, 50)
 CloseBtn.Text              = "✕"
 CloseBtn.Font              = Enum.Font.GothamBold
 CloseBtn.TextSize          = 13
-CloseBtn.TextColor3        = COL_ACCENT
+CloseBtn.TextColor3        = Color3.fromRGB(245, 245, 245)
 CloseBtn.BorderSizePixel   = 0
 CloseBtn.Parent            = TitleBar
 
@@ -510,7 +511,12 @@ makeSlider(aimbotPanel, "Aim Smoothness", 3, 0.00, 1.00, 0.15, function(val)
     smoothness = 1 - (val * SMOOTHNESS_SCALE)
 end)
 
-makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 4)
+makeToggle(aimbotPanel, "Visible Only", 4, function(val)
+    visibleOnly = val
+    if not val then lockedTarget = nil end
+end)
+
+makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 5)
 
 -- ── Visuals Tab ──
 makeToggle(visualsPanel, "Name ESP",       1, function(val) nameEnabled   = val end)
@@ -545,7 +551,7 @@ makeNote(notesPanel, "Toggle key is Insert", 3)
 local fovCircle = Drawing.new("Circle")
 fovCircle.Visible   = false
 fovCircle.Thickness = 1.5
-fovCircle.Color     = Color3.fromRGB(255, 255, 255)
+fovCircle.Color     = COL_ACCENT
 fovCircle.Filled    = false
 fovCircle.NumSides  = 64
 fovCircle.Radius    = fovRadius
@@ -653,6 +659,21 @@ local function worldToScreen(pos)
     return Vector2.new(vp.X, vp.Y), inView, vp.Z
 end
 
+local function isTargetVisible(targetPart, character)
+    if not targetPart or not character then return false end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    local ignore = {Camera}
+    if LocalPlayer.Character then
+        table.insert(ignore, LocalPlayer.Character)
+    end
+    params.FilterDescendantsInstances = ignore
+    local origin = Camera.CFrame.Position
+    local direction = targetPart.Position - origin
+    local result = workspace:Raycast(origin, direction, params)
+    return (not result) or result.Instance:IsDescendantOf(character)
+end
+
 local function getClosestHead()
     local mousePos  = getMousePos()
     local bestDist  = math.huge
@@ -668,6 +689,7 @@ local function getClosestHead()
 
         local screenPos, inView = worldToScreen(head.Position)
         if not inView then continue end
+        if visibleOnly and not isTargetVisible(head, character) then continue end
 
         local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
         if dist <= fovRadius and dist < bestDist then
@@ -721,15 +743,19 @@ RunService.RenderStepped:Connect(function()
             if not humanoid or humanoid.Health <= 0 or not lockedTarget.Parent.Parent then
                 lockedTarget = nil
             else
-                local screenPos, inView = worldToScreen(lockedTarget.Position)
-                if inView then
-                    local current  = mousePos
-                    local target   = Vector2.new(screenPos.X, screenPos.Y)
-                    local newPos   = current:Lerp(target, smoothness)
-                    -- Move mouse toward target (requires executor mousemoverel)
-                    local delta = newPos - current
-                    if mousemoverel then
-                        mousemoverel(delta.X, delta.Y)
+                if visibleOnly and not isTargetVisible(lockedTarget, lockedTarget.Parent) then
+                    lockedTarget = nil
+                else
+                    local screenPos, inView = worldToScreen(lockedTarget.Position)
+                    if inView then
+                        local current  = mousePos
+                        local target   = Vector2.new(screenPos.X, screenPos.Y)
+                        local newPos   = current:Lerp(target, smoothness)
+                        -- Move mouse toward target (requires executor mousemoverel)
+                        local delta = newPos - current
+                        if mousemoverel then
+                            mousemoverel(delta.X, delta.Y)
+                        end
                     end
                 end
             end
