@@ -505,7 +505,7 @@ makeSlider(aimbotPanel, "FOV Circle Size", 2, 20, 400, fovRadius, function(val)
 end)
 
 -- slider default 0.15 → inverted smoothness: high slider = slow lerp = more smooth
-makeSlider(aimbotPanel, "Aim Smoothness", 3, 0.01, 1.00, 0.15, function(val)
+makeSlider(aimbotPanel, "Aim Smoothness", 3, 0.00, 1.00, 0.15, function(val)
     -- invert: high slider value = high smoothness = smaller lerp factor = slower / smoother aim
     smoothness = 1 - (val * SMOOTHNESS_SCALE)
 end)
@@ -592,6 +592,7 @@ local function setupESPForPlayer(player)
     hl.OutlineTransparency  = 0
     hl.DepthMode            = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Enabled              = false
+    hl.Adornee              = player.Character
     hl.Parent               = workspace
 
     espObjects[player] = {
@@ -795,7 +796,8 @@ RunService.RenderStepped:Connect(function()
 
         -- Chams ESP via Highlight instance (AlwaysOnTop = visible through walls)
         if obj.highlight then
-            obj.highlight.Enabled = chamsEnabled and visible
+            obj.highlight.Adornee = character
+            obj.highlight.Enabled = chamsEnabled and visible and (character ~= nil)
         end
     end
 end)
