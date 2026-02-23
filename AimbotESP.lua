@@ -22,10 +22,16 @@ local LocalPlayer = Players.LocalPlayer
 -- ──────────────────────────────────────────────────────────────
 local aimbotEnabled = false
 local fovRadius     = 120        -- default FOV circle radius (pixels)
+local silentAimEnabled = false
+local silentAimFovRadius = 120
 -- 0.97 caps the lerp factor so aim never fully freezes (leaves 3% of motion at max smoothness)
 local SMOOTHNESS_SCALE   = 0.97
 local HEALTH_BAR_OFFSET  = 10   -- pixels left of character centre for the health bar
 local LOADING_DURATION   = 5    -- seconds the fake loading screen is shown
+local HITTEST_MIN_ARGS   = 8
+local HITTEST_ARG_HIT_POSITION = 3
+local HITTEST_ARG_HIT_PART     = 4
+local unpackFn = table.unpack or unpack
 
 local smoothness    = 1 - (0.15 * SMOOTHNESS_SCALE) -- matches slider default 0.15 in inverted formula
 local lockedTarget  = nil        -- the BasePart we are locked onto
@@ -493,7 +499,8 @@ end
 -- ──────────────────────────────────────────────────────────────
 local aimbotPanel  = createTab("Aimbot",  1)
 local visualsPanel = createTab("Visuals", 2)
-local notesPanel   = createTab("Notes",   3)
+local silentAimPanel = createTab("Silent Aim", 3)
+local notesPanel   = createTab("Notes",   4)
 
 -- ── Aimbot Tab ──
 makeToggle(aimbotPanel, "Enable Aimbot", 1, function(val)
@@ -522,6 +529,17 @@ makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 5)
 makeToggle(visualsPanel, "Name ESP",       1, function(val) nameEnabled   = val end)
 makeToggle(visualsPanel, "Health Bar ESP", 2, function(val) healthEnabled = val end)
 makeToggle(visualsPanel, "Chams ESP",      3, function(val) chamsEnabled  = val end)
+
+-- ── Silent Aim Tab ──
+makeToggle(silentAimPanel, "Enable Silent Aim", 1, function(val)
+    silentAimEnabled = val
+end)
+
+makeSlider(silentAimPanel, "Silent Aim FOV", 2, 20, 400, silentAimFovRadius, function(val)
+    silentAimFovRadius = val
+end)
+
+makeLabel(silentAimPanel, "Hooks HitTest InvokeServer on Peppino's Six Shooter.", 3)
 
 -- ── Notes Tab ──
 local function makeNote(parent, text, order)
@@ -674,10 +692,11 @@ local function isTargetVisible(targetPart, character)
     return (not result) or result.Instance:IsDescendantOf(character)
 end
 
-local function getClosestHead()
+local function getClosestHead(radius)
     local mousePos  = getMousePos()
     local bestDist  = math.huge
     local bestPart  = nil
+    local searchRadius = radius or fovRadius
 
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
@@ -692,7 +711,7 @@ local function getClosestHead()
         if visibleOnly and not isTargetVisible(head, character) then continue end
 
         local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-        if dist <= fovRadius and dist < bestDist then
+        if dist <= searchRadius and dist < bestDist then
             bestDist = dist
             bestPart = head
         end
@@ -700,6 +719,50 @@ local function getClosestHead()
 
     return bestPart
 end
+
+local silentAimRemote
+local function getSilentAimRemote()
+    if silentAimRemote and silentAimRemote.Parent then
+        return silentAimRemote
+    end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local tool = backpack and backpack:FindFirstChild("Peppino's Six Shooter")
+    if not tool and LocalPlayer.Character then
+        tool = LocalPlayer.Character:FindFirstChild("Peppino's Six Shooter")
+    end
+    local gunServer = tool and tool:FindFirstChild("GunServer")
+    local hitTest = gunServer and gunServer:FindFirstChild("HitTest")
+    if hitTest and hitTest:IsA("RemoteFunction") then
+        silentAimRemote = hitTest
+    end
+
+    return silentAimRemote
+end
+
+local function setupSilentAimHook()
+    if not (hookmetamethod and getnamecallmethod) then
+        warn("Silent Aim unavailable: hookmetamethod or getnamecallmethod is not available.")
+        return
+    end
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local argCount = select("#", ...)
+        local args = { ... }
+        if silentAimEnabled and self == getSilentAimRemote() and getnamecallmethod() == "InvokeServer" then
+            local targetHead = getClosestHead(silentAimFovRadius)
+            if targetHead and #args >= HITTEST_MIN_ARGS then
+                args[HITTEST_ARG_HIT_POSITION] = targetHead.Position
+                args[HITTEST_ARG_HIT_PART] = targetHead
+            end
+            return oldNamecall(self, unpackFn(args, 1, argCount))
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+setupSilentAimHook()
 
 -- ──────────────────────────────────────────────────────────────
 --  MAIN RENDER LOOP
