@@ -592,6 +592,7 @@ local function setupESPForPlayer(player)
     hl.OutlineTransparency  = 0
     hl.DepthMode            = Enum.HighlightDepthMode.AlwaysOnTop
     hl.Enabled              = false
+    hl.Adornee              = player.Character
     hl.Parent               = workspace
 
     espObjects[player] = {
@@ -795,7 +796,8 @@ RunService.RenderStepped:Connect(function()
 
         -- Chams ESP via Highlight instance (AlwaysOnTop = visible through walls)
         if obj.highlight then
-            obj.highlight.Enabled = chamsEnabled and visible
+            obj.highlight.Adornee = character
+            obj.highlight.Enabled = chamsEnabled and visible and (character ~= nil)
         end
     end
 end)
