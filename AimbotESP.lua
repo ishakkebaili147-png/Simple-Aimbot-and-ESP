@@ -59,6 +59,7 @@ local COL_DIM      = Color3.fromRGB(180, 170, 170)
 local COL_TOGON    = Color3.fromRGB(200, 30,  30)
 local COL_TOGOFF   = Color3.fromRGB(45,  45,  50)
 local COL_SLIDER   = Color3.fromRGB(220, 40,  40)
+local COL_BORDER   = Color3.fromRGB(30,  30,  36)
 local COL_TAB_ACTIVE = Color3.fromRGB(28, 28, 34)
 
 -- ── Main Window ──
@@ -79,7 +80,7 @@ MainCorner.Parent = MainFrame
 
 local MainStroke = Instance.new("UIStroke")
 MainStroke.Thickness = 1
-MainStroke.Color = Color3.fromRGB(30, 30, 36)
+MainStroke.Color = COL_BORDER
 MainStroke.Transparency = 0.35
 MainStroke.Parent = MainFrame
 
