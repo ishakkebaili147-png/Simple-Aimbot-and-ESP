@@ -30,6 +30,8 @@ local LOADING_DURATION   = 5    -- seconds the fake loading screen is shown
 local smoothness    = 1 - (0.15 * SMOOTHNESS_SCALE) -- matches slider default 0.15 in inverted formula
 local lockedTarget  = nil        -- the BasePart we are locked onto
 local visibleOnly   = false
+local aimPartMode   = "Head"
+local legitMode     = false
 
 local espEnabled    = false
 local chamsEnabled  = false
@@ -373,15 +375,23 @@ local function makeToggle(parent, labelText, order, callback)
     btn.Text                   = ""
     btn.Parent                 = row
 
-    btn.MouseButton1Click:Connect(function()
-        state = not state
+    local function setState(nextState, fireCallback)
+        state = nextState
         togBG.BackgroundColor3 = state and COL_TOGON or COL_TOGOFF
         togKnob.Position       = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
         togKnob.BackgroundColor3 = state and COL_BG or COL_ACCENT
-        if callback then callback(state) end
+        if fireCallback and callback then callback(state) end
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        setState(not state, true)
     end)
 
-    return row
+    return {
+        row = row,
+        setState = setState,
+        getState = function() return state end,
+    }
 end
 
 -- ──────────────────────────────────────────────────────────────
@@ -503,7 +513,8 @@ end
 -- ──────────────────────────────────────────────────────────────
 local aimbotPanel  = createTab("Aimbot",  1)
 local visualsPanel = createTab("Visuals", 2)
-local notesPanel   = createTab("Notes",   3)
+local partPanel    = createTab("Part selection", 3)
+local notesPanel   = createTab("Notes",   4)
 
 -- ── Aimbot Tab ──
 makeToggle(aimbotPanel, "Enable Aimbot", 1, function(val)
@@ -526,12 +537,45 @@ makeToggle(aimbotPanel, "Visible Only", 4, function(val)
     if not val then lockedTarget = nil end
 end)
 
-makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 5)
+makeToggle(aimbotPanel, "Legit mode", 5, function(val)
+    legitMode = val
+    lockedTarget = nil
+end)
+
+makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 6)
 
 -- ── Visuals Tab ──
 makeToggle(visualsPanel, "Name ESP",       1, function(val) nameEnabled   = val end)
 makeToggle(visualsPanel, "Health Bar ESP", 2, function(val) healthEnabled = val end)
 makeToggle(visualsPanel, "Chams ESP",      3, function(val) chamsEnabled  = val end)
+
+-- ── Part selection Tab ──
+local partModes = {
+    "Head",
+    "Torso",
+    "Left Leg",
+    "Right Leg",
+    "Left Foot",
+    "Right Foot",
+    "Closest to Crosshair",
+}
+local partToggles = {}
+for idx, modeName in ipairs(partModes) do
+    partToggles[modeName] = makeToggle(partPanel, modeName, idx, function(val)
+        if not val then
+            partToggles[modeName].setState(true, false)
+            return
+        end
+        aimPartMode = modeName
+        lockedTarget = nil
+        for otherName, toggle in pairs(partToggles) do
+            if otherName ~= modeName and toggle.getState() then
+                toggle.setState(false, false)
+            end
+        end
+    end)
+end
+partToggles["Head"].setState(true, true)
 
 -- ── Notes Tab ──
 local function makeNote(parent, text, order)
@@ -684,28 +728,62 @@ local function isTargetVisible(targetPart, character)
     return (not result) or result.Instance:IsDescendantOf(character)
 end
 
-local function getClosestHead(radius)
+local function getCharacterTargetParts(character, mode)
+    if not character then return {} end
+    local partMap = {
+        ["Head"] = {"Head"},
+        ["Torso"] = {"UpperTorso", "Torso", "HumanoidRootPart"},
+        ["Left Leg"] = {"LeftLowerLeg", "LeftUpperLeg", "Left Leg"},
+        ["Right Leg"] = {"RightLowerLeg", "RightUpperLeg", "Right Leg"},
+        ["Left Foot"] = {"LeftFoot"},
+        ["Right Foot"] = {"RightFoot"},
+    }
+
+    local names = partMap[mode]
+    if names then
+        for _, name in ipairs(names) do
+            local part = character:FindFirstChild(name)
+            if part and part:IsA("BasePart") then
+                return {part}
+            end
+        end
+        return {}
+    end
+
+    local closestParts = {}
+    for _, partName in ipairs({"Head", "UpperTorso", "Torso", "LeftLowerLeg", "RightLowerLeg", "LeftFoot", "RightFoot", "Left Leg", "Right Leg"}) do
+        local part = character:FindFirstChild(partName)
+        if part and part:IsA("BasePart") then
+            table.insert(closestParts, part)
+        end
+    end
+    return closestParts
+end
+
+local function getClosestTargetPart(radius)
     local mousePos  = getMousePos()
     local bestDist  = math.huge
     local bestPart  = nil
     local searchRadius = radius or fovRadius
+    local targetMode = legitMode and "Closest to Crosshair" or aimPartMode
 
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
         local character = player.Character
         if not character then continue end
-        local head = character:FindFirstChild("Head")
         local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if not head or not humanoid or humanoid.Health <= 0 then continue end
+        if not humanoid or humanoid.Health <= 0 then continue end
 
-        local screenPos, inView = worldToScreen(head.Position)
-        if not inView then continue end
-        if visibleOnly and not isTargetVisible(head, character) then continue end
+        for _, targetPart in ipairs(getCharacterTargetParts(character, targetMode)) do
+            local screenPos, inView = worldToScreen(targetPart.Position)
+            if not inView then continue end
+            if visibleOnly and not isTargetVisible(targetPart, character) then continue end
 
-        local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-        if dist <= searchRadius and dist < bestDist then
-            bestDist = dist
-            bestPart = head
+            local dist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+            if dist <= searchRadius and dist < bestDist then
+                bestDist = dist
+                bestPart = targetPart
+            end
         end
     end
 
@@ -744,7 +822,7 @@ RunService.RenderStepped:Connect(function()
     -- ── Aimbot ──
     if aimbotEnabled and m2Held then
         if not lockedTarget then
-            lockedTarget = getClosestHead()
+            lockedTarget = getClosestTargetPart()
         end
 
         if lockedTarget then
@@ -761,7 +839,8 @@ RunService.RenderStepped:Connect(function()
                     if inView then
                         local current  = mousePos
                         local target   = Vector2.new(screenPos.X, screenPos.Y)
-                        local newPos   = current:Lerp(target, smoothness)
+                        local currentSmoothness = legitMode and (smoothness * 0.5) or smoothness
+                        local newPos   = current:Lerp(target, currentSmoothness)
                         -- Move mouse toward target (requires executor mousemoverel)
                         local delta = newPos - current
                         if mousemoverel then
