@@ -527,7 +527,7 @@ makeSlider(aimbotPanel, "FOV Circle Size", 2, 20, 400, fovRadius, function(val)
 end)
 
 -- slider default 0.15 → inverted smoothness: high slider = slow lerp = more smooth
-makeSlider(aimbotPanel, "Aim Smoothness", 3, 0.00, 1.00, 0.15, function(val)
+makeSlider(aimbotPanel, "Aim Smoothness", 3, -1.00, 1.00, 0.15, function(val)
     -- invert: high slider value = high smoothness = smaller lerp factor = slower / smoother aim
     smoothness = 1 - (val * SMOOTHNESS_SCALE)
 end)
@@ -839,7 +839,7 @@ RunService.RenderStepped:Connect(function()
                     if inView then
                         local current  = mousePos
                         local target   = Vector2.new(screenPos.X, screenPos.Y)
-                        local currentSmoothness = legitMode and (smoothness * 0.5) or smoothness
+                        local currentSmoothness = math.clamp(legitMode and (smoothness * 0.5) or smoothness, 0, 1)
                         local newPos   = current:Lerp(target, currentSmoothness)
                         -- Move mouse toward target (requires executor mousemoverel)
                         local delta = newPos - current
