@@ -839,7 +839,7 @@ RunService.RenderStepped:Connect(function()
                     if inView then
                         local current  = mousePos
                         local target   = Vector2.new(screenPos.X, screenPos.Y)
-                        local currentSmoothness = math.clamp(legitMode and (smoothness * 0.5) or smoothness, 0, 1)
+                        local currentSmoothness = legitMode and (smoothness * 0.5) or smoothness
                         local newPos   = current:Lerp(target, currentSmoothness)
                         -- Move mouse toward target (requires executor mousemoverel)
                         local delta = newPos - current
