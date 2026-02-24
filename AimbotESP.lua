@@ -527,7 +527,7 @@ makeSlider(aimbotPanel, "FOV Circle Size", 2, 20, 400, fovRadius, function(val)
 end)
 
 -- slider default 0.15 → inverted smoothness: high slider = slow lerp = more smooth
-makeSlider(aimbotPanel, "Aim Smoothness", 3, 0.00, 1.00, 0.15, function(val)
+makeSlider(aimbotPanel, "Aim Smoothness", 3, -1.00, 1.00, 0.15, function(val)
     -- invert: high slider value = high smoothness = smaller lerp factor = slower / smoother aim
     smoothness = 1 - (val * SMOOTHNESS_SCALE)
 end)
