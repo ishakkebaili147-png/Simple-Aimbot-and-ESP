@@ -22,16 +22,10 @@ local LocalPlayer = Players.LocalPlayer
 -- ──────────────────────────────────────────────────────────────
 local aimbotEnabled = false
 local fovRadius     = 120        -- default FOV circle radius (pixels)
-local silentAimEnabled = false
-local silentAimFovRadius = 120
 -- 0.97 caps the lerp factor so aim never fully freezes (leaves 3% of motion at max smoothness)
 local SMOOTHNESS_SCALE   = 0.97
 local HEALTH_BAR_OFFSET  = 10   -- pixels left of character centre for the health bar
 local LOADING_DURATION   = 5    -- seconds the fake loading screen is shown
-local HITTEST_MIN_ARGS   = 8
-local HITTEST_ARG_HIT_POSITION = 3
-local HITTEST_ARG_HIT_PART     = 4
-local unpackFn = table.unpack or unpack
 
 local smoothness    = 1 - (0.15 * SMOOTHNESS_SCALE) -- matches slider default 0.15 in inverted formula
 local lockedTarget  = nil        -- the BasePart we are locked onto
@@ -65,6 +59,8 @@ local COL_DIM      = Color3.fromRGB(180, 170, 170)
 local COL_TOGON    = Color3.fromRGB(200, 30,  30)
 local COL_TOGOFF   = Color3.fromRGB(45,  45,  50)
 local COL_SLIDER   = Color3.fromRGB(220, 40,  40)
+local COL_BORDER   = Color3.fromRGB(30,  30,  36)
+local COL_TAB_ACTIVE = Color3.fromRGB(28, 28, 34)
 
 -- ── Main Window ──
 local MainFrame = Instance.new("Frame")
@@ -81,6 +77,12 @@ MainFrame.Parent          = ScreenGui
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 1
+MainStroke.Color = COL_BORDER
+MainStroke.Transparency = 0.35
+MainStroke.Parent = MainFrame
 
 -- Title bar
 local TitleBar = Instance.new("Frame")
@@ -244,10 +246,12 @@ local function switchTab(name)
     if activeTab then
         tabPanels[activeTab].Visible     = false
         tabButtons[activeTab].TextColor3 = COL_DIM
+        tabButtons[activeTab].BackgroundColor3 = COL_PANEL
     end
     activeTab = name
     tabPanels[name].Visible     = true
     tabButtons[name].TextColor3 = COL_ACCENT
+    tabButtons[name].BackgroundColor3 = COL_TAB_ACTIVE
 end
 
 local function createTab(name, order)
@@ -499,8 +503,7 @@ end
 -- ──────────────────────────────────────────────────────────────
 local aimbotPanel  = createTab("Aimbot",  1)
 local visualsPanel = createTab("Visuals", 2)
-local silentAimPanel = createTab("Silent Aim", 3)
-local notesPanel   = createTab("Notes",   4)
+local notesPanel   = createTab("Notes",   3)
 
 -- ── Aimbot Tab ──
 makeToggle(aimbotPanel, "Enable Aimbot", 1, function(val)
@@ -529,17 +532,6 @@ makeLabel(aimbotPanel, "Hold M2 (Right-Click) to aim.", 5)
 makeToggle(visualsPanel, "Name ESP",       1, function(val) nameEnabled   = val end)
 makeToggle(visualsPanel, "Health Bar ESP", 2, function(val) healthEnabled = val end)
 makeToggle(visualsPanel, "Chams ESP",      3, function(val) chamsEnabled  = val end)
-
--- ── Silent Aim Tab ──
-makeToggle(silentAimPanel, "Enable Silent Aim", 1, function(val)
-    silentAimEnabled = val
-end)
-
-makeSlider(silentAimPanel, "Silent Aim FOV", 2, 20, 400, silentAimFovRadius, function(val)
-    silentAimFovRadius = val
-end)
-
-makeLabel(silentAimPanel, "Hooks HitTest InvokeServer on Peppino's Six Shooter.", 3)
 
 -- ── Notes Tab ──
 local function makeNote(parent, text, order)
@@ -719,50 +711,6 @@ local function getClosestHead(radius)
 
     return bestPart
 end
-
-local silentAimRemote
-local function getSilentAimRemote()
-    if silentAimRemote and silentAimRemote.Parent then
-        return silentAimRemote
-    end
-
-    local backpack = LocalPlayer:FindFirstChild("Backpack")
-    local tool = backpack and backpack:FindFirstChild("Peppino's Six Shooter")
-    if not tool and LocalPlayer.Character then
-        tool = LocalPlayer.Character:FindFirstChild("Peppino's Six Shooter")
-    end
-    local gunServer = tool and tool:FindFirstChild("GunServer")
-    local hitTest = gunServer and gunServer:FindFirstChild("HitTest")
-    if hitTest and hitTest:IsA("RemoteFunction") then
-        silentAimRemote = hitTest
-    end
-
-    return silentAimRemote
-end
-
-local function setupSilentAimHook()
-    if not (hookmetamethod and getnamecallmethod) then
-        warn("Silent Aim unavailable: hookmetamethod or getnamecallmethod is not available.")
-        return
-    end
-
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local argCount = select("#", ...)
-        local args = { ... }
-        if silentAimEnabled and self == getSilentAimRemote() and getnamecallmethod() == "InvokeServer" then
-            local targetHead = getClosestHead(silentAimFovRadius)
-            if targetHead and #args >= HITTEST_MIN_ARGS then
-                args[HITTEST_ARG_HIT_POSITION] = targetHead.Position
-                args[HITTEST_ARG_HIT_PART] = targetHead
-            end
-            return oldNamecall(self, unpackFn(args, 1, argCount))
-        end
-        return oldNamecall(self, ...)
-    end)
-end
-
-setupSilentAimHook()
 
 -- ──────────────────────────────────────────────────────────────
 --  MAIN RENDER LOOP
